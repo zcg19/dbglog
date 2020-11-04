@@ -1,0 +1,867 @@
+[common]
+dump_functions=0
+dump_modules=0
+dump_breakpoints=1
+stack_level=1
+log_level=0
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 函数解析
+[c_header]
+count = 2
+path0 = d:\temp\test_dbglog_funcs.h
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 32位汇编指令与机器码
+[asm_x86]
+count=100
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; 内部硬编码过滤
+;asm =50,57           --> push eax, ecx, edx, ebx, esp, ebp, esi, edi, 
+;asm =58,5f           --> pop  ...
+;asm =60,61           --> pusha, popa
+
+asm0 =68xxxxxxxx      --> push xxxxxxxx
+asm1 =6axx            --> push xx
+asm2 =ff35xxxxxxxx    --> push dword ptr [xxxxxxxx]
+asm3 =ff7424xx        --> push dword ptr [esp+xx]
+asm4 =894424xx        --> mov  dword ptr [esp+xx], eax
+asm5 =8ae1            --> mov  ah,  cl
+asm6 =8bc1            --> mov  eax, ecx
+asm7 =8bFF            --> mov  edi, edi  |55 -->push ebp
+asm8 =8bc0            --> mov  eax, eax
+asm9 =8bd4            --> mov  edx, esp
+asm10=8b18            --> mov  ebx, dword ptr [eax]
+asm13=8b41xx          --> mov  eax, dword ptr [ecx+xx]
+asm14=8b4424xx        --> mov  eax, dword ptr [esp+xx]
+asm15=8b4c24xx        --> mov  ecx, dword ptr [esp+4]
+asm16=8b5424xx        --> mov  ebx, dword ptr [esp+xx]
+asm17=8b15xxxxxxxx    --> mov  edx, dword ptr fs:[xx]
+asm18=8b80xxxxxxxx    --> mov  eax, dword ptr [eax+xxxxxxxx]
+asm19=8b0dxxxxxxxx    --> mov  ecx, dword ptr [xxxxxxxx]      ||增加前缀 64后地址为 fs:[xxxxxxxx], 
+asm20=a1xxxxxxxx      --> mov  eax, dword ptr [xxxxxxxx]      ||...
+asm21=b8xxxxxxxx      --> mov  eax, xxxxxxxx
+asm22=b9xxxxxxxx      --> mov  ecx, xx
+asm23=baxxxxxxxx      --> mov  edx, xxxxxxxx
+
+asm30=ebxx            --> jmp  xx                             ||偏移
+asm31=e9xxxxxxxx      --> jmp  xxxxxxxx                       ||.....
+asm32=ff25xxxxxxxx    --> jmp  dword ptr ds:[xxxxxxxx]
+asm33=e8xxxxxxxx      --> call xxxxxxxx                       ||偏移
+asm34=ff15xxxxxxxx    --> call xxxxxxxx
+asm35=33c0            --> xor  eax, eax
+
+asm40=8d41xx          --> lea  eax, [ecx+xx]
+asm41=8d5424xx        --> lea  edx, [esp+xx]
+asm42=8d8424xxxxxxxx  --> lea  eax, [esp+xxh]
+asm43=c701xxxxxxxx    --> mov  dword ptr [ecx], xxxxxxxx
+asm44=c705xxxxxxxxyyyyyyyy --> mov dword ptr ds:[xxxxxxxx], yyyyyyyy
+asm45=83c8xx          --> or   eax, xx
+asm46=833dxxxxxxxxyy  --> cmp  dword ptr [xxxxxxxx], yy
+asm47=803dxxxxxxxxyy  --> cmp  byte  ptr [xxxxxxxx], yy
+asm48=8379xxyy        --> mov  dword ptr [ecx+xx], yy
+asm49=83ecxx          --> sub  esp, xx
+asm50=a8xx            --> test al, xx
+asm51=0fb605xxxxxxxx  --> movzx eax, byte ptr [xxxxxxxx]
+asm52=80f9xx          --> cmp  cl, xx
+
+asm98=c2xxxx          --> ret  xx
+asm99=c3              --> ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 几种跳转指令对应的机器码
+e8xxxxxxxx            --> call 后面的四个字节是偏移, 相对于当前指令的下一条指令
+e9xxxxxxxx            --> jmp  后面的四个字节是偏移
+ebxx                  --> jmp  后面的一个字节是偏移
+ff15xxxxxxxx          --> call 后面的四个字节是调用地址
+ff25xxxxxxxx          --> jmp  后面的四个字节是跳转地址
+86xxxxxxxx            
+63,64,65,66,67        --> 这几个没有使用. 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 特殊的函数头. 
+_ExpInterlockedPopEntrySListFault@0:
+775F2751 8B 18            mov         ebx,dword ptr [eax] 
+_ExpInterlockedPopEntrySListEnd@0:
+775F2753 F0 0F C7 4D 00   lock cmpxchg8b qword ptr [ebp] 
+775F2758 74 0F            je          ExpInterlockedPopEntrySListEnd+16h (775F2769h) 
+
+
+[asm_x64]
+count = 100
+
+asm1=488bc4           --> mov rax, rsp
+asm2=4883ecxx         --> sub rsp, xx
+asm3=48894c24xx       --> mov qword ptr [rsp+xx], rcx
+asm4=48895424xx       --> mov qword ptr [rsp+xx], rdx
+asm5=48895c24xx       --> mov qword ptr [rsp+xx], rbx
+asm6=48896c24xx       --> mov qword ptr [rsp+xx], rbp
+asm7=48897424xx       --> mov qword ptr [rsp+xx], rsi
+asm8=48897c24xx       --> mov qword ptr [rsp+xx], rdi
+asm9=4c894424xx       --> mov qword ptr [rsp+xx], r8
+asm10=4c894c24xx       --> mov qword ptr [rsp+xx], r9
+asm11=e9xxxxxx        --> jmp xxxxxxxx                  ;off addr
+asm12=ebxx            --> jmp xx                        ;off addr
+asm13=ff25xxxxxxxx    --> jmp qword ptr [xxxxxxxx]      ;off addr
+asm15=4533c0          --> xor r8d,r8d
+asm16=4885c9          --> test rcx, rcx
+asm17=8bd1            --> mov edx, ecx
+asm18=4533c9          --> xor r9d, r9d
+asm19=4881ecxxxxxxxx  --> sub rsp, xx
+
+asm20=4c8b41xx        --> mov r8,  qword ptr [rcx+8]
+asm21=4c8b5c24xx      --> mov r11, qword ptr [rsp+xx]
+asm22=4c8bc1          --> mov r8,  rcx
+asm23=4c8bc2          --> mov r8,  rdx
+asm24=4c8bc9          --> mov r9,  rcx
+asm25=4c8bca          --> mov r9,  rdx
+asm26=4c8bd1          --> mov r10, rcx
+asm27=4c8bd9          --> mov r11, rcx
+asm28=4c8bdc          --> mov r11, rsp
+asm29=41b9xxxxxxxx    --> mov r9d, xxxxxxxx
+asm30=488b05xxxxxxxx  --> mov rax, qword ptr [xxxxxxxx] ;off addr
+asm31=488bc1          --> mov rax, rcx
+asm32=488bc2          --> mov rax, rdx
+asm33=488bd1          --> mov rdx, rcx
+asm34=65488b0425xxxxxxxx --> mov rax, qword ptr gs:[xx]
+asm35=4d8bc8          --> mov r9, r8
+asm36=488d05xxxxxxxx  --> lea rax, [xxxxxxxx]           ;off addr
+
+asm40=fff3            --> push rbx
+asm41=fff5            --> push rbp
+asm42=fff6            --> push rsi
+asm43=fff7            --> push rdi
+
+asm50=33d2            --> xor edx,edx
+asm52=44894424xx      --> mov dword ptr [rsp+xx], r8d
+asm53=44894c24xx      --> mov dword ptr [rsp+xx], r9d
+asm54=885424xx        --> mov byte  prt [rsp+xx], dl
+asm55=66895424xx      --> mov word  ptr [rsp+xx], dx
+asm56=895424xx        --> mov dword ptr [rsp+xx], edx
+asm57=44884424xx      --> mov byte  ptr [rsp+xx], r8b
+asm58=44884c24xx      --> mov byte  ptr [rsp+xx], r9b
+asm59=6844894424xx    --> mov word  ptr [rsp+xx], r8w
+asm60=6844894c24xx    --> mov word  ptr [rsp+xx], r9w
+asm61=f20f114424xx    --> movsd mmword ptr [rsp+xx], xmm0
+asm62=f20f114c24xx    --> movsd mmword ptr [rsp+xx], xmm1
+asm63=f30f114424xx    --> movss mmword ptr [rsp+xx], xmm0
+asm64=f30f114c24xx    --> movss mmword ptr [rsp+xx], xmm1
+asm65=6644894424xx    --> mov word  ptr [rsp+xx], r8w
+asm66=6644894c24xx    --> mov word  ptr [rsp+xx], r9w
+asm67=894c24xx        --> mov dword ptr [rsp+xx], ecx
+asm68=48ff25xxxxxxxx  --> jmp qword ptr [xxxxxxxx]       ;off addr
+asm69=f20f1005xxxxxxxx   --> movsd xmm0, mmword ptr[xxxxxxxx] ;off
+asm70=f30f1005xxxxxxxx   --> movss xmm0, mmword ptr[xxxxxxxx] ;off
+
+
+
+[call]
+count=1
+call0=%target%-->*
+
+
+[filter_dll]
+dll_count=3
+dll0=1
+dll1=-ntdll.dll
+dll2=-kernel32.dll
+dll0=lpk.dll
+dll1=oleaut32.dll
+dll2=msvcrt.dll
+dll3=usp10.dll
+dll4=ole32.dll
+dll5=rpcrt4.dll
+dll6=cryptbase.dll
+dll7=crypt32.dll
+dll8=shlwapi.dll
+dll9=propsys.dll
+dll10=imm32.dll
+dll11=apphelp.dll
+dll12=msasni.dll
+dll13=ucrtbase.dll
+dll14=shell32.dll
+
+
+[filter_func]
+func_count=720
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 下面的函数不是真正的函数, 可能是导出表之类的, 设置断点后导致异常
+;;; 程序内部会读取这些函数的地址再增加偏移导致异常. 
+;;; rpcrt4.dll, 
+func0=pfnMarshallRoutines
+func1=pfnSizeRoutines
+func2=pfnUnmarshallRoutines
+
+;;; user32.dll
+func3=gSharedInfo
+func4=gapfnScSendMessage
+
+;;; lpk.dll
+func5=LpkEditControl
+
+;;; 下面的好像也不是函数, 反汇编后无意义 
+;;; rpcrt4.dll
+func6=NdrTypeFlags          -->0000000001000000
+func7=SimpleTypeAlignment   -->0000000000010101
+func8=SimpleTypeBufferSize
+func9=SimpleTypeMemorySize
+
+;;; msvcrt.dll
+func10=_wctype
+func11=_ctype
+func12=_sys_nerr
+func13=_sys_errlist
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 全局过滤， 因为太多了. 
+func14=malloc
+func15=free
+func16=wcslen
+func17=DllGetClassObject
+
+func18=OffsetRect    ; user32.dll
+func19=LCMapStringW  ; kernelbase.dll
+func20=RtlAddressInSectionTable
+func21=NtQueryKey
+func22=ZwQueryKey
+func23=NtOpenKeyEx
+func24=ZwOpenKeyEx
+func25=RegCloseKey
+func26=CreateFontIndirectExW
+func27=CreateFontIndirectA
+func28=CreateFontA
+func29=CallWindowProcW
+func30=RtlDecodePointer
+func31=RtlEncodePointer
+func32=RtlCopyMemory
+func33=RtlMoveMemory
+func34=RtlRandomEx
+func35=GetKeyState
+func36=GetDateFormatW
+func37=GetTimeFormatW
+func38=GetNumberFormatW
+
+func39=NtClose
+func40=CloseHandle
+func41=GetObjectW
+func42=IsRectEmpty
+func43=IsZoomed
+func44=SetWindowLongPtrW
+func45=GetClassLongW
+func46=NtProtectVirtualMemory
+func47=NtQueryVirtualMemory
+func48=GetTextMetricsW
+func49=CopyRect
+
+func50=RtlUserThreadStart
+func51=BaseThreadInitThunk
+
+
+;;; shell32.dll
+func53=ILGetSize
+func54=ILClone
+func55=ILFree
+func56=ILCombine
+func57=ILFindLastID
+func58=SHRestricted
+
+;;; USP10.dll
+func60=UspAllocTemp
+func61=ScriptPlace
+func62=ScriptShape
+func63=ScriptCacheGetHeight
+func64=ScriptItemize
+func65=ScriptApplyDigitSubstitution
+func66=ScriptFreeCache
+func67=ScriptBreak
+func68=ScriptTextOut
+func69=ScriptGetFontProperties
+
+;;; COMCTL32.dll
+func70=DPA_Create
+func71=DSA_DeleteItem
+func72=DSA_GetItemPtr
+func73=DSA_GetItem
+func74=DefSubclassProc
+
+;;; kernelbase.dll
+func80=NlsValidateLocale
+func81=InternalLcidToName
+
+;;; shlwapi.dll
+func84=StrStrIW
+func85=SHRegGetValueW
+func86=StrChrW
+func87=StrRChrW
+func88=SHAnsiToUnicode
+func89=StrDupW
+func90=StrCmpNIW
+func91=StrCmpIW
+func92=StrCmpCW
+func93=StrChrIW
+func94=ChrCmpIW
+func95=StrCmpW
+func96=StrCmpLogicalW
+func97=SHUnicodeToAnsi
+func98=IUnknown_AtomicRelease
+func99=QISearch
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 各个模块的过滤, C函数大多被过滤了. 
+;;; ntdll.dll
+func100=A_SHAFinal
+func101=DbgBreakPoint
+func102=DbgUiRemoteBreakin
+func103=DbgUserBreakPoint
+func104=EtwEventEnabled
+func105=KiUserExceptionDispatcher
+func106=LdrInitializeThunk
+func107=NtContinue
+func108=NtCreateEvent
+func109=NtOpenEvent
+func110=NtOpenThreadToken
+func111=NtQueryPerformanceCounter
+func112=NtRaiseException
+func113=NtReleaseMutant
+func114=NtTestAlert
+func115=NtWaitForSingleObject
+func116=RtlAcquireSRWLockExclusive
+func117=RtlAcquireSRWLockShared
+func118=RtlAddRefActivationContext
+func119=RtlAnsiCharToUnicodeChar
+func120=RtlAnsiStringToUnicodeSize
+func121=RtlAnsiStringToUnicodeString
+func122=RtlCaptureContext
+func123=RtlCloneMemoryStream
+func124=RtlCompareMemory
+func125=RtlCompareMemoryUlong
+func126=RtlCompareUnicodeString
+func127=RtlCompareUnicodeStrings
+func128=RtlCopyUnicodeString
+func129=RtlDeleteBoundaryDescriptor
+func130=RtlDeleteCriticalSection
+func131=RtlDosPathNameToRelativeNtPathName_U_WithStatus
+func132=RtlEnterCriticalSection
+func133=RtlExpandEnvironmentStrings_U
+func134=RtlFillMemoryUlong
+func135=RtlFindActivationContextSectionString
+func136=RtlFindCharInUnicodeString
+func137=RtlFlsAlloc
+func138=RtlGetFullPathName_UEx
+func139=RtlGetIntegerAtom
+func140=RtlGetLastWin32Error
+func141=RtlGetNtGlobalFlags
+func142=RtlHashUnicodeString
+func143=RtlImageDirectoryEntryToData
+func144=RtlImageNtHeader
+func145=RtlImageNtHeaderEx
+func146=RtlImageRvaToSection
+func147=RtlInitAnsiString
+func148=RtlInitAnsiStringEx
+func149=RtlInitString
+func150=RtlInitializeConditionVariable
+func151=RtlInitializeCriticalSectionEx
+func152=RtlInitializeExceptionChain
+func153=RtlInitializeSRWLock
+func154=RtlInterlockedCompareExchange64
+func155=RtlInterlockedPopEntrySList
+func156=RtlIsValidHandle
+func157=RtlLeaveCriticalSection
+func158=RtlLockHeap
+func159=RtlUnlockHeap
+func160=RtlMultiByteToUnicodeN
+func161=RtlMultiByteToUnicodeSize
+func162=RtlNtStatusToDosError
+func163=RtlNtStatusToDosErrorNoTeb
+func164=RtlOemStringToUnicodeSize
+func165=RtlQueryDepthSList
+func166=RtlRaiseException
+func167=RtlReAllocateHeap
+func168=RtlReleaseSRWLockShared
+func169=RtlReportException
+func170=RtlRestoreLastWin32Error
+func171=RtlRunOnceBeginInitialize
+func172=RtlRunOnceInitialize
+func173=RtlSetLastWin32Error
+func174=RtlSetUnhandledExceptionFilter
+func175=RtlSizeHeap
+func176=RtlTimeFieldsToTime
+func177=RtlTimeToTimeFields
+func178=RtlTryEnterCriticalSection
+func179=RtlUpcaseUnicodeChar
+func180=RtlUpcaseUnicodeToMultiByteN
+func181=RtlValidSid
+func182=RtlValidateHeap
+func183=RtlValidateUnicodeString
+func184=RtlxAnsiStringToUnicodeSize
+func185=RtlxOemStringToUnicodeSize
+func186=ZwContinue
+func187=ZwOpenThreadToken
+func188=ZwRaiseException
+func189=ZwReleaseMutant
+func190=ZwTestAlert
+func191=RtlFreeAnsiString
+func192=RtlFreeHeap
+func193=RtlFreeHandle
+func194=RtlFlsFree
+func195=RtlCreateUnicodeString
+func196=ZwCreateEvent
+func197=NtSetEvent
+func198=CreateEventExW
+func199=_alldiv
+func200=_alldvrm
+func201=_allmul
+func202=_alloca_probe
+func203=_alloca_probe_16
+func204=_alloca_probe_8
+func205=_allrem
+func206=_allshl
+func207=_allshr
+func208=_atoi64
+func209=_aulldiv
+func210=_aulldvrm
+func211=_aullrem
+func212=_aullshr
+func213=_chkstk
+func214=_fltused
+func215=NtCreateMutant
+func216=CreateMutexExW
+func217=RtlUTF8ToUnicodeN
+func218=NtdllDialogWndProc_W
+func219=ZwCreateMutant
+func220=ZwWaitForSingleObject
+func221=ZwSetEvent
+func222=ZwAllocateVirtualMemory
+func223=RtlInitializeCriticalSectionAndSpinCount
+func224=wcsncmp
+func225=wcsstr
+func226=wcsrchr
+func227=RtlEqualUnicodeString
+func228=RtlIntegerToChar
+func229=RtlInitializeCriticalSection
+func230=ExpInterlockedPopEntrySListResume16
+func231=RtlInitUnicodeString
+func232=ZwOpenEvent
+func233=RtlFreeUnicodeString
+func234=ExpInterlockedPopEntrySListFault16
+func235=RtlCreateUnicodeStringFromAsciiz
+func236=RtlInitUnicodeStringEx
+func237=RtlAppendUnicodeStringToString
+func238=RtlUnicodeStringToInteger
+func239=RtlAppendUnicodeToString
+func240=RtlUnicodeStringToAnsiSize
+func241=RtlUnicodeToMultiByteSize
+func242=RtlUnicodeToMultiByteN
+func243=RtlUnicodeStringToAnsiString
+func244=RtlAcquirePebLock
+func245=RtlReleasePebLock
+func246=RtlActivateActivationContextUnsafeFast
+func247=RtlDeactivateActivationContextUnsafeFast
+func248=RtlMultiAppendUnicodeStringBuffer
+func249=NtAllocateVirtualMemory
+func250=NtFreeVirtualMemory
+func251=RtlIntegerToUnicodeString
+func252=ExpInterlockedPopEntrySListEnd16
+func253=ExpInterlockedPopEntrySListFault
+func254=ExpInterlockedPopEntrySListEnd
+func255=ExpInterlockedPopEntrySListResume
+func256=_vswprintf
+func257=_wcsicmp
+func258=_wcslwr
+func259=_wcsnicmp
+func260=_wcsnset_s
+func261=_wcsset_s
+func262=_wcstoui64
+func263=_wcsupr
+func264=_wmakepath_s
+func265=_wsplitpath_s
+func266=_wtoi
+func267=_wtoi64
+func268=_wtol
+func269=abs
+func270=atan
+func271=atoi
+func272=atol
+func273=bsearch
+func274=ceil
+func275=cos
+func276=fabs
+func277=floor
+func278=isalnum
+func279=isalpha
+func280=iscntrl
+func281=isdigit
+func282=isgraph
+func283=islower
+func284=isprint
+func285=ispunct
+func286=isspace
+func287=isupper
+func288=iswalpha
+func289=iswctype
+func290=iswdigit
+func291=iswlower
+func292=iswspace
+func293=iswxdigit
+func294=isxdigit
+func295=labs
+func296=log
+func297=mbstowcs
+func298=memchr
+func299=memcmp
+func300=memcpy
+func301=memcpy_s
+func302=memmove
+func303=memmove_s
+func304=memset
+func305=pow
+func306=qsort
+func307=sin
+func308=sprintf
+func309=sprintf_s
+func310=sqrt
+func311=vDbgPrintEx
+func312=vDbgPrintExWithPrefix
+
+;;; PROPSYS.dll
+func321=PropVariantToGUID
+func322=PropVariantToInt32
+func323=PropVariantToUInt32
+func324=PropVariantToStringWithDefault
+func325=PropVariantToInt32WithDefault
+func326=PropVariantToUInt64
+func327=VariantToPropVariant
+func328=PSPropertyBag_ReadType
+func329=PSPropertyBag_ReadBSTR
+func330=PSPropertyBag_ReadStrAlloc
+func331=PSPropertyBag_ReadDWORD
+func332=PSPropertyBag_ReadBOOL
+func333=PropVariantGetElementCount
+
+;;; OLEAUT32.dll
+func347=SysAllocString
+func348=VariantCopy
+func349=VariantInit
+func350=SafeArrayLock
+func351=SafeArrayUnlock
+func352=SafeArrayDestroy
+func353=VariantClear
+func354=SafeArrayGetLBound
+func355=VariantChangeType
+func356=VariantChangeTypeEx
+func357=SafeArrayGetDim
+func358=SafeArrayPtrOfIndex
+func359=SafeArrayReleaseDescriptor
+
+;;; apphelp.dll
+func360=SdbGetTagDataSize
+func361=SdbGetFirstChild
+func362=SdbGetTagFromTagID
+func363=SdbGetNextChild
+func364=SdbGetFileInfo
+func365=SdbFindFirstTag
+func366=SdbGetStringTagPtr
+
+;;; kernel32.dll
+func369=BaseSetLastNTError
+func370=CompareStringEx
+func371=CompareStringW
+func372=FileTimeToDosDateTime
+func373=FlsAlloc
+func374=FlsGetValue
+func375=FlsSetValue
+func376=GetLastError
+func377=GetModuleHandleA
+func378=GetModuleHandleW
+func379=GetProcessId
+func380=GetStringTypeExW
+func381=GetStringTypeW
+func382=GetSystemTimeAsFileTime
+func383=GetTickCount
+func384=HeapCreate
+func385=HeapFree
+func386=HeapValidate
+func387=InitializeCriticalSectionAndSpinCount
+func388=InterlockedDecrement
+func389=InterlockedExchangeAdd
+func390=InterlockedIncrement
+func391=IsDBCSLeadByte
+func392=IsDebuggerPresent
+func393=LocalAlloc
+func394=LocalFree
+func395=LocalLock
+func396=LocalReAlloc
+func397=LocalUnlock
+func398=OpenEventA
+func399=OpenEventW
+func400=RaiseException
+func401=RegKrnGetGlobalState
+func402=SetLastError
+func403=TlsGetValue
+func404=TlsSetValue
+func405=UnhandledExceptionFilter
+func406=VerifyConsoleIoHandle
+func407=WaitForMultipleObjectsEx
+func408=WaitForSingleObject
+func409=WaitForSingleObjectEx
+func410=lstrlen
+func411=lstrlenA
+func412=lstrlenW
+func413=lstrcmpi
+func414=lstrcmpiW
+func415=GetTickCount64
+func416=FileTimeToLocalFileTime
+func417=FileTimeToSystemTime
+func418=SystemTimeToFileTime
+func419=SpecialMBToWC
+func420=InitializeCriticalSectionEx
+func421=QueryPerformanceCounter
+func422=GetCurrentThreadId
+func423=GetCurrentProcessId
+func424=lstrcmp
+func425=CompareStringA
+func426=MultiByteToWideChar
+func427=WideCharToMultiByte
+func428=SystemTimeToTzSpecificLocalTime
+func429=TzSpecificLocalTimeToSystemTime
+
+;;; USER32.dll
+func430=BeginPaint
+func431=EndPaint
+func432=CallMsgFilterW
+func433=DispatchMessageW
+func434=GetDlgItem
+func435=GetMessageW
+func436=GetPropW
+func437=GetWindow
+func438=GetWindowDC
+func439=IsDialogMessageW
+func440=IsThreadDesktopComposited
+func441=IsWindow
+func442=IsWindowEnabled
+func443=IsWindowInDestroy
+func444=IsWindowVisible
+func445=PeekMessageW
+func446=RemovePropW
+func447=SetPropW
+func448=SetWindowCompositionAttribute
+func449=TranslateAcceleratorW
+func450=TranslateMessage
+func451=TranslateMessageEx
+func452=KillTimer
+func453=CharNextW
+func454=CharNextA
+func456=GetDlgCtrlID
+func457=GetWindowThreadProcessId
+
+;;; GDI32.dll
+func460=GdiDrawStream
+func461=GdiReleaseDC
+func462=GetMapMode
+func463=GetFontRealizationInfo
+func464=GdiRealizationInfo
+func465=DeleteObject
+
+;;; msvcrt.dll
+func470=_CIcos
+func471=_CIlog
+func472=_CIpow
+func473=_CIsin
+func474=_CIsqrt
+func475=_CrtDbgBreak
+func476=__dllonexit
+func477=__isascii
+func478=__iscsym
+func479=__iscsymf
+func480=__toascii
+func481=_atoi64
+func482=_except_handler4_common
+func483=_ftol
+func484=_i64toa
+func485=_i64toa_s
+func486=_i64tow
+func487=_i64tow_s
+func488=_isleadbyte_l
+func489=_itoa
+func490=_itoa_s
+func491=_itow
+func492=_itow_s
+func493=_lfind
+func494=_lock
+func495=_ltoa
+func496=_makepath_s
+func497=_mbtowc_l
+func498=_memccpy
+func499=_memicmp
+func500=_msize
+func501=_snprintf
+func502=_snprintf_s
+func503=_snscanf_s
+func504=_snwprintf
+func505=_snwprintf_s
+func506=_snwscanf_s
+func507=_splitpath
+func508=_splitpath_s
+func509=_strcmpi
+func510=_stricmp
+func511=_strnset_s
+func512=_strset_s
+func513=_strupr
+func514=_swprintf
+func515=_towlower_l
+func516=_ui64toa
+func517=_ui64toa_s
+func518=_ui64tow
+func519=_ui64tow_s
+func520=_ultoa
+func521=_ultoa_s
+func522=_ultow
+func523=_ultow_s
+func524=_unlock
+func525=_vscwprintf
+func526=_vsnprintf
+func527=_vsnprintf_l
+func528=_vsnprintf_s
+func529=_vsnwprintf
+func530=_vsnwprintf_l
+func531=_vsnwprintf_s
+func532=_vswprintf
+func533=_wcsicmp
+func534=_wcslwr
+func535=_wcsnicmp
+func536=_wcsnset_s
+func537=_wcsset_s
+func538=_wcstoui64
+func539=_wcsupr
+func540=_wmakepath_s
+func541=_wsplitpath_s
+func542=_wtoi
+func543=_wtoi64
+func544=_wtol
+func545=abs
+func546=atan
+func547=atoi
+func548=atol
+func549=bsearch
+func550=ceil
+func551=cos
+func552=fabs
+func553=floor
+func555=isalnum
+func556=isalpha
+func557=iscntrl
+func558=isdigit
+func559=isgraph
+func560=islower
+func561=isprint
+func562=ispunct
+func563=isspace
+func564=isupper
+func565=iswalpha
+func566=iswctype
+func567=iswdigit
+func568=iswlower
+func569=iswspace
+func570=iswxdigit
+func571=isxdigit
+func572=labs
+func573=log
+func575=mbstowcs
+func576=memchr
+func577=memcmp
+func578=memcpy
+func579=memcpy_s
+func580=memmove
+func581=memmove_s
+func582=memset
+func583=pow
+func584=qsort
+func585=sin
+func586=sprintf
+func587=sprintf_s
+func588=sqrt
+func589=sscanf
+func590=sscanf_s
+func591=strcat
+func592=strcat_s
+func593=strchr
+func594=strcmp
+func595=strcpy
+func596=strcpy_s
+func597=strcspn
+func598=strlen
+func599=strncat
+func600=strncmp
+func601=strncpy
+func602=strncpy_s
+func603=strnlen
+func604=strpbrk
+func605=strrchr
+func606=strspn
+func607=strstr
+func608=strtok_s
+func609=strtol
+func610=strtoul
+func611=swprintf
+func612=swprintf_s
+func613=swscanf_s
+func614=tan
+func615=tolower
+func616=toupper
+func617=towlower
+func618=towupper
+func619=vsnprintf
+func620=vsprintf
+func621=vsprintf_s
+func622=vswprintf_s
+func623=wcscat
+func624=wcscat_s
+func625=wcschr
+func626=wcscmp
+func627=wcscpy
+func628=wcscpy_s
+func629=wcscspn
+func630=_iswctype_l
+func631=rand
+func632=wcsncpy_s
+func633=_towupper_l
+func634=_errno
+
+;;; RPCRT4.dll
+func650=I_RpcClearMutex
+func651=I_RpcExceptionFilter
+func652=I_RpcFreeBuffer
+func653=I_RpcRequestMutex
+func654=RpcExceptionFilter
+func655=pfnMarshallRoutines
+func656=pfnSizeRoutines
+func657=pfnUnmarshallRoutines
+func658=MesHandleFree
+func659=RpcBindingFree
+
+;;; ole32.dll
+func690=CoGetApartmentType
+func691=CoGetMalloc
+func692=CoTaskMemAlloc
+func693=CreateBindCtx
+func694=ComPs_NdrDllCanUnloadNow
+func695=IsValidPtrIn
+func696=IsValidPtrOut
+func697=PropVariantCopy
+func698=CoTaskMemRealloc
+
+;;; msvcp90.dll
+func700=_Mtxlock
+func701=_Mtxunlock
+func702=_encode_pointer
+func703=_decode_pointer
+func704=??0_Lockit@std@@QEAA@H@Z
+func705=??1_Lockit@std@@QEAA@XZ
+func706=_encoded_null
+func707=_CrtIsValidPointer
+func708=_CrtIsValidHeapPointer
